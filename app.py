@@ -18,7 +18,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Updated styling to match the reference image: mint sidebar, clean white cards, teal accents.
+
 st.markdown("""
 <style>
 :root {
@@ -296,15 +296,11 @@ footer {
 """, unsafe_allow_html=True)
 
 
-# Application heading
+
 st.title("📚 Intelligent Library Search & Collection Agent")
-st.caption(
-    "An AI-based library navigation system using graph search, "
-    "heuristic pathfinding and route planning."
-)
 
 
-# Sidebar settings
+
 with st.sidebar:
     st.header("Library Controls")
 
@@ -351,7 +347,7 @@ with st.sidebar:
     )
 
 
-# Apply library conditions
+
 graph = available_graph(
     LIBRARY_GRAPH,
     closed_sections,
@@ -366,7 +362,7 @@ usable_books = [
 ]
 
 
-# Main navigation tabs
+
 tab_search, tab_collect, tab_map, tab_catalog = st.tabs([
     "🔎 Find a Book",
     "🧺 Collect Multiple Books",
@@ -375,9 +371,7 @@ tab_search, tab_collect, tab_map, tab_catalog = st.tabs([
 ])
 
 
-# --------------------------------------------------
-# TAB 1: FIND A BOOK
-# --------------------------------------------------
+
 with tab_search:
     left, right = st.columns([1, 1.15], gap="large")
 
@@ -495,9 +489,7 @@ with tab_search:
             )
 
 
-# --------------------------------------------------
-# TAB 2: COLLECT MULTIPLE BOOKS
-# --------------------------------------------------
+
 with tab_collect:
     st.subheader("Multiple-Book Collection Planner")
 
@@ -590,9 +582,7 @@ with tab_collect:
         )
 
 
-# --------------------------------------------------
-# TAB 3: LIBRARY GRAPH
-# --------------------------------------------------
+
 with tab_map:
     st.subheader("Visual Library Map")
 
@@ -686,9 +676,7 @@ with tab_map:
         st.write(", ".join(crowded_aisles) or "None")
 
 
-# --------------------------------------------------
-# TAB 4: BOOK CATALOGUE
-# --------------------------------------------------
+
 with tab_catalog:
     st.subheader("Library Book Catalogue")
 
@@ -724,10 +712,6 @@ with tab_catalog:
     )
 
 
-# Footer
+
 st.divider()
 
-st.caption(
-    "Intelligent Library Search and Book Collection Agent | "
-    "Python, Streamlit and AI Search Algorithms"
-)
