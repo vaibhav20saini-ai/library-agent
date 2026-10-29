@@ -575,11 +575,7 @@ with tab_collect:
                 )
             )
 
-        st.caption(
-            "The planner uses a greedy heuristic. It is a practical "
-            "approach for this project, but it does not guarantee "
-            "the globally shortest route."
-        )
+        
 
 
 
