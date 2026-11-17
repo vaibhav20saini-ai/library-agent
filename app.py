@@ -312,6 +312,12 @@ with st.sidebar:
         index=0
     )
 
+    user_role = st.selectbox(
+        "User type",
+        ["Student", "Faculty", "Library Staff"]
+    )
+    st.caption("Faculty and Library Staff can use restricted shelves.")
+
     st.markdown("### Library Conditions")
 
     closed_sections = st.multiselect(
@@ -321,7 +327,7 @@ with st.sidebar:
     )
 
     restricted_shelves = st.multiselect(
-        "Restricted shelves",
+        "Restricted shelves / aisles",
         all_nodes,
         default=RESTRICTED_SHELVES_DEFAULT
     )
@@ -348,17 +354,37 @@ with st.sidebar:
 
 
 
+# restricted shelves are blocked only for students
+if user_role == "Student":
+    blocked_restricted = list(restricted_shelves)
+else:
+    blocked_restricted = []
+
 graph = available_graph(
     LIBRARY_GRAPH,
     closed_sections,
-    restricted_shelves,
+    blocked_restricted,
     crowded_aisles,
     crowd_penalty
 )
 
+blocked_nodes = set(closed_sections) | set(blocked_restricted)
+
+# places we can still walk to from the starting point
+reachable = set()
+if start_node in graph:
+    to_visit = [start_node]
+    while to_visit:
+        current = to_visit.pop()
+        if current in reachable:
+            continue
+        reachable.add(current)
+        to_visit.extend(graph.get(current, {}).keys())
+
 usable_books = [
     book for book in BOOKS
-    if book["available"] and book["shelf"] in graph
+    if book["available"]
+    and book["shelf"] in reachable
 ]
 
 
@@ -400,10 +426,22 @@ with tab_search:
         if not target_book["available"]:
             st.warning("This book is currently unavailable.")
 
-        elif target_book["shelf"] not in graph:
+        elif target_book["shelf"] in blocked_restricted:
             st.warning(
-                "This shelf is closed or restricted. "
+                "This shelf is restricted for students. Choose Faculty "
+                "or Library Staff as the user type to access it."
+            )
+
+        elif target_book["shelf"] in closed_sections:
+            st.warning(
+                "This shelf is in a closed section. "
                 "Change the library conditions to access it."
+            )
+
+        elif target_book["shelf"] not in reachable and start_node in graph:
+            st.warning(
+                "This shelf cannot be reached because the way to it "
+                "is blocked (closed or restricted place on the path)."
             )
 
         elif start_node not in graph:
@@ -589,9 +627,13 @@ with tab_map:
 
     G = nx.Graph()
 
-    for node, neighbours in graph.items():
+    # the whole library stays on the map, even when a place is blocked
+    for node, neighbours in LIBRARY_GRAPH.items():
         for neighbour, weight in neighbours.items():
-            G.add_edge(node, neighbour, weight=weight)
+            if node in NODE_POSITIONS and neighbour in NODE_POSITIONS:
+                # show the current cost (with crowd penalty) if the walkway is usable
+                current_cost = graph.get(node, {}).get(neighbour, weight)
+                G.add_edge(node, neighbour, weight=current_cost)
 
     fig, ax = plt.subplots(figsize=(12, 7))
 
@@ -599,29 +641,56 @@ with tab_map:
     fig.patch.set_facecolor("#F8FAFC")
     ax.set_facecolor("#F8FAFC")
 
-    pos = {
-        node: NODE_POSITIONS[node]
-        for node in G.nodes
-        if node in NODE_POSITIONS
-    }
+    pos = {node: NODE_POSITIONS[node] for node in G.nodes}
+
+    open_edges = [
+        e for e in G.edges
+        if e[0] not in blocked_nodes and e[1] not in blocked_nodes
+    ]
+    blocked_edges = [e for e in G.edges if e not in open_edges]
 
     nx.draw_networkx_edges(
-        G,
-        pos,
-        ax=ax,
-        edge_color="#A8C9C4",
-        width=2.0
+        G, pos, edgelist=open_edges, ax=ax,
+        edge_color="#A8C9C4", width=2.0
+    )
+    nx.draw_networkx_edges(
+        G, pos, edgelist=blocked_edges, ax=ax,
+        edge_color="#E5B4B4", width=1.5, style="dashed"
     )
 
-    nx.draw_networkx_nodes(
-        G,
-        pos,
-        ax=ax,
-        node_color="#D1F0E8",
-        edgecolors="#0D9488",
-        node_size=2200,
-        linewidths=1.8
-    )
+    blocked_list = [n for n in G.nodes if n in blocked_nodes]
+    unreachable_list = [
+        n for n in G.nodes
+        if n not in blocked_nodes and n not in reachable
+    ]
+    crowded_list = [
+        n for n in G.nodes
+        if n in crowded_aisles and n in reachable and n not in blocked_nodes
+    ]
+    normal_list = [
+        n for n in G.nodes
+        if n in reachable and n not in crowded_list and n not in blocked_nodes
+        and n not in restricted_shelves
+    ]
+
+    # restricted shelves that this user is allowed to use
+    permitted_list = [
+        n for n in G.nodes
+        if n in restricted_shelves and n not in blocked_nodes and n in reachable
+    ]
+
+    for nodes, fill, border in [
+        (normal_list, "#D1F0E8", "#0D9488"),
+        (permitted_list, "#EDE9FE", "#7C3AED"),
+        (crowded_list, "#FEF3C7", "#F59E0B"),
+        (unreachable_list, "#E5E7EB", "#9CA3AF"),
+        (blocked_list, "#FBD5D5", "#DC2626"),
+    ]:
+        nx.draw_networkx_nodes(
+            G, pos, nodelist=nodes, ax=ax,
+            node_color=fill, edgecolors=border,
+            node_size=2200, linewidths=1.8
+        )
 
     nx.draw_networkx_labels(
         G,
@@ -655,6 +724,13 @@ with tab_map:
     st.pyplot(fig, use_container_width=True)
     plt.close(fig)
 
+    st.caption(
+        "Teal = open, yellow = crowded, red = closed or restricted, "
+        "purple = restricted but open for this user, "
+        "grey = cannot be reached from the starting point, "
+        "dashed lines = blocked walkways."
+    )
+
     st.markdown("### Current Library Conditions")
 
     condition1, condition2, condition3 = st.columns(3)
@@ -687,11 +763,19 @@ with tab_catalog:
         if not book["available"]:
             status = "Unavailable"
 
-        elif book["shelf"] not in graph:
-            status = "Blocked by current settings"
+        elif book["shelf"] in blocked_restricted:
+            status = "Restricted"
+
+        elif book["shelf"] in closed_sections:
+            status = "Closed section"
+
+        elif book["shelf"] not in reachable:
+            status = "Path blocked"
 
         else:
             status = "Available"
+            if book["shelf"] in restricted_shelves:
+                status = "Available (permission granted)"
 
         catalog_rows.append({
             "Title": book["title"],
